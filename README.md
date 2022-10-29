@@ -28,6 +28,10 @@ vim .env
 yarn app-run
 ```
 
+If updated detected, PR will be created
+
+![generated PR](./doc/generated_pr.png)
+
 ## Environment variables
 
 - `DATABASE_ID`: Your Notion database id
