@@ -109,7 +109,9 @@ export class Git {
       return;
     }
 
+    console.log("image downloading...");
     await this.downloadImages(images);
+    console.log("Done");
 
     // commit and push
     console.log("some diff detected. updating or creating md...");
@@ -257,10 +259,12 @@ export class Git {
 
   private async downloadImages(images: ImagePair[]) {
     for (const image of images) {
+      console.log(`downloading image: ${image.url}`);
       await download.image({
         url: image.url,
         dest: `${process.cwd()}/${this.getImageDir()}${image.file_name}`,
       });
+      console.log("OK");
     }
   }
 
