@@ -131,6 +131,6 @@ export class Notion {
   }
 
   private getDate(page: PageObjectResponse): string {
-    return format(new Date(page.created_time), "yyyy-MM-dd");
+    return format(new Date(page.last_edited_time), "yyyy-MM-dd");
   }
 }
