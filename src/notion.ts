@@ -1,10 +1,10 @@
-import { Client } from "@notionhq/client";
+import { type Client } from '@notionhq/client';
 import {
-  PageObjectResponse,
-  PartialPageObjectResponse,
-  QueryDatabaseResponse,
-} from "@notionhq/client/build/src/api-endpoints";
-import { format } from "date-fns";
+  type PageObjectResponse,
+  type PartialPageObjectResponse,
+  type QueryDatabaseResponse,
+} from '@notionhq/client/build/src/api-endpoints';
+import { format } from 'date-fns';
 
 interface NotionPropNames {
   permalink: string;
@@ -28,7 +28,10 @@ export interface NotionPageData {
 }
 
 export class Notion {
-  constructor(private _config: NotionConfig, private client: Client) {
+  constructor(
+    private readonly _config: NotionConfig,
+    private readonly client: Client,
+  ) {
     this._config = _config;
     this.client = client;
   }
@@ -36,15 +39,15 @@ export class Notion {
   /**
    * getByDatabaseID retrieves list of page data. It throws Error when failed.
    */
-  public async getByDatabaseID(database_id: string): Promise<NotionPageData[]> {
+  public async getByDatabaseID(databaseID: string): Promise<NotionPageData[]> {
     let posts: PageObjectResponse[] = [];
-    let cursor: string | undefined = undefined;
-    let has_more = false;
+    let cursor: string | undefined;
+    let hasMore = false;
 
     try {
       do {
         const res: QueryDatabaseResponse = await this.client.databases.query({
-          database_id: database_id,
+          database_id: databaseID,
           start_cursor: cursor,
           filter: {
             and: [
@@ -64,16 +67,16 @@ export class Notion {
           },
         });
 
-        has_more = res.has_more;
-        cursor = res.next_cursor !== null ? res.next_cursor : undefined;
+        hasMore = res.has_more;
+        cursor = res.next_cursor ?? undefined;
         posts = posts.concat(
           res.results.filter((v) =>
-            this.isPageObjectResponse(v)
-          ) as PageObjectResponse[]
+            this.isPageObjectResponse(v),
+          ) as PageObjectResponse[],
         );
-      } while (has_more);
+      } while (hasMore);
     } catch (e) {
-      throw new Error(`failed to fetch the blog posts: ${e}`);
+      throw new Error(`failed to fetch the blog posts: ${String(e)}`);
     }
 
     const result: NotionPageData[] = [];
@@ -92,45 +95,45 @@ export class Notion {
   }
 
   private isPageObjectResponse(
-    res: PageObjectResponse | PartialPageObjectResponse
+    res: PageObjectResponse | PartialPageObjectResponse,
   ): res is PageObjectResponse {
-    return "url" in res;
+    return 'url' in res;
   }
 
   private getPermalink(page: PageObjectResponse): string {
     const permalink = page.properties[this._config.props.permalink];
     if (
-      permalink.type === "rich_text" &&
+      permalink.type === 'rich_text' &&
       permalink.rich_text.length > 0 &&
-      permalink.rich_text[0].plain_text !== ""
+      permalink.rich_text[0].plain_text !== ''
     ) {
       return permalink.rich_text[0].plain_text;
     }
-    return format(new Date(page.created_time), "yyyy-MM-dd-hh-mm-ss");
+    return format(new Date(page.created_time), 'yyyy-MM-dd-hh-mm-ss');
   }
 
   private getTags(page: PageObjectResponse): string[] {
     const tags = page.properties[this._config.props.tag];
-    return tags.type === "multi_select"
+    return tags.type === 'multi_select'
       ? tags.multi_select.map((val) => val.name)
       : [];
   }
 
   private getTitle(page: PageObjectResponse): string {
-    const title = page.properties["Name"];
-    return title.type === "title" && title.title.length > 0
+    const title = page.properties.Name;
+    return title.type === 'title' && title.title.length > 0
       ? title.title[0].plain_text
-      : "";
+      : '';
   }
 
   private getCategory(page: PageObjectResponse): string {
     const category = page.properties[this._config.props.category];
-    return category.type === "select" && category.select !== null
+    return category.type === 'select' && category.select !== null
       ? category.select.name
-      : "";
+      : '';
   }
 
   private getDate(page: PageObjectResponse): string {
-    return format(new Date(page.last_edited_time), "yyyy-MM-dd");
+    return format(new Date(page.last_edited_time), 'yyyy-MM-dd');
   }
 }

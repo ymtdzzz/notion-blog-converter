@@ -1,12 +1,12 @@
-import dotenv from "dotenv";
+import dotenv from 'dotenv';
+import { Client, LogLevel } from '@notionhq/client';
+import { NotionToMarkdown } from 'notion-to-md';
+import { exit } from 'process';
+import { Notion, type NotionPageData } from './notion';
+import { Git } from './git';
+import { Octokit } from 'octokit';
+import { initConfig } from './config';
 dotenv.config();
-import { Client, LogLevel } from "@notionhq/client";
-import { NotionToMarkdown } from "notion-to-md";
-import { exit } from "process";
-import { Notion, NotionPageData } from "./notion";
-import { Git } from "./git";
-import { Octokit } from "octokit";
-import { initConfig } from "./config";
 
 const config = initConfig();
 
@@ -19,19 +19,19 @@ const gclient = new Octokit({ auth: config.github.pat });
 
 const n2m = new NotionToMarkdown({ notionClient: nclient });
 
-(async () => {
+await (async () => {
   // retrieve blog posts
   const notion = new Notion(
     {
       props: config.property_names,
     },
-    nclient
+    nclient,
   );
   let pages: NotionPageData[] = [];
   try {
     pages = await notion.getByDatabaseID(config.notion.database_id);
   } catch (e) {
-    console.error(`failed to get pages by database_id: ${e}`);
+    console.error(`failed to get pages by database_id: ${String(e)}`);
     exit(1);
   }
 
@@ -44,9 +44,9 @@ const n2m = new NotionToMarkdown({ notionClient: nclient });
       await git.process(page, mdString);
     }
   } catch (e) {
-    console.error(`error occurred when handling git repository: ${e}`);
+    console.error(`error occurred when handling git repository: ${String(e)}`);
   } finally {
-    if (git) {
+    if (git !== undefined) {
       git.close();
     }
   }
