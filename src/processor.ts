@@ -64,7 +64,8 @@ export class Processor {
 
     try {
       await git.clone(config.github.repo, '.');
-    } finally {
+    } catch (e) {
+      console.error(`failed to clone repository: ${String(e)}`);
       processor.close();
     }
     const summary = await processor.git.branch();
