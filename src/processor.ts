@@ -58,17 +58,21 @@ export class Processor {
       trimmed: false,
     });
     const md = new Markdown(config, n2m);
-    const res = new Processor(git, githubClient, workdir, config, md);
+    const processor = new Processor(git, githubClient, workdir, config, md);
     const user = await githubClient.rest.users.getAuthenticated();
-    res.github_user = user.data.login;
+    processor.github_user = user.data.login;
 
-    await git.clone(config.github.repo, '.');
-    const summary = await res.git.branch();
-    res.branches = summary.all.filter((v) =>
-      v.startsWith(res.branch_remote_prefix),
+    try {
+      await git.clone(config.github.repo, '.');
+    } finally {
+      processor.close();
+    }
+    const summary = await processor.git.branch();
+    processor.branches = summary.all.filter((v) =>
+      v.startsWith(processor.branch_remote_prefix),
     );
 
-    return res;
+    return processor;
   }
 
   public async process(page: NotionPageData): Promise<void> {
