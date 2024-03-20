@@ -16,31 +16,27 @@ interface ImagePair {
  * Don't forget to call close() in finally block.
  */
 export class Git {
-  private readonly _image_dir_prefix = 'images/notion/';
-  private readonly _branch_local_prefix = 'auto-generate/';
-  private readonly _branch_remote_prefix = `remotes/origin/${this._branch_local_prefix}`;
-  private _branches: string[] = [];
-  private _blog_assert_dir = ''; // ex.) "../src/assets/"
-  private _blog_post_dir = ''; // ex.) "content/posts/"
-  private _github_repo_name = '';
-  private _github_user = '';
+  private readonly image_dir_prefix = 'images/notion/';
+  private readonly branch_local_prefix = 'auto-generate/';
+  private readonly branch_remote_prefix = `remotes/origin/${this.branch_local_prefix}`;
+  private branches: string[] = [];
+  private blog_asset_dir = ''; // ex.) "../src/assets/"
+  private blog_post_dir = ''; // ex.) "content/posts/"
+  private github_repo_name = '';
+  private github_user = '';
 
   private constructor(
-    private readonly _git: SimpleGit,
-    private readonly _github: Octokit,
-    private readonly _working_dir: string,
+    private readonly git: SimpleGit,
+    private readonly github: Octokit,
+    private readonly working_dir: string,
   ) {
-    this._git = _git;
-    this._working_dir = _working_dir;
-  }
-
-  get branches(): string[] {
-    return this._branches;
+    this.git = git;
+    this.working_dir = working_dir;
   }
 
   public close(): void {
     console.log('deleting tmp dir...');
-    fs.rmSync(this._working_dir, { recursive: true, force: true });
+    fs.rmSync(this.working_dir, { recursive: true, force: true });
   }
 
   public static async build(
@@ -59,20 +55,20 @@ export class Git {
       trimmed: false,
     });
     const res = new Git(git, githubClient, workdir);
-    res._blog_assert_dir = config.blog.asset_dir;
-    res._blog_post_dir = config.blog.post_dir;
+    res.blog_asset_dir = config.blog.asset_dir;
+    res.blog_post_dir = config.blog.post_dir;
     const githubRepoElems = config.github.repo.split('/');
-    res._github_repo_name = githubRepoElems[githubRepoElems.length - 1].replace(
+    res.github_repo_name = githubRepoElems[githubRepoElems.length - 1].replace(
       '.git',
       '',
     );
     const user = await githubClient.rest.users.getAuthenticated();
-    res._github_user = user.data.login;
+    res.github_user = user.data.login;
 
     await git.clone(config.github.repo, '.');
-    const summary = await res._git.branch();
-    res._branches = summary.all.filter((v) =>
-      v.startsWith(res._branch_remote_prefix),
+    const summary = await res.git.branch();
+    res.branches = summary.all.filter((v) =>
+      v.startsWith(res.branch_remote_prefix),
     );
 
     return res;
@@ -85,17 +81,17 @@ export class Git {
 
     if (!this.branchExists(page.permalink)) {
       console.log('branch not exists. create new branch from main branch...');
-      await this._git.checkoutLocalBranch(
-        `${this._branch_local_prefix}${page.permalink}`,
+      await this.git.checkoutLocalBranch(
+        `${this.branch_local_prefix}${page.permalink}`,
       );
       console.log('Done');
     } else {
       console.log(
         'branch already exists. check out a branch from remote branch...',
       );
-      await this._git.checkoutBranch(
-        `${this._branch_local_prefix}${page.permalink}`,
-        `${this._branch_remote_prefix}${page.permalink}`,
+      await this.git.checkoutBranch(
+        `${this.branch_local_prefix}${page.permalink}`,
+        `${this.branch_remote_prefix}${page.permalink}`,
       );
       console.log('Done');
     }
@@ -117,26 +113,26 @@ export class Git {
     console.log('Done');
 
     console.log('commit and push...');
-    await this._git.add(this.getMdPathForGit(page));
-    await this._git.add(`${this.getImageDirForGit()}/*`);
-    await this._git.commit(`update post ${page.permalink}`);
-    await this._git.push(
+    await this.git.add(this.getMdPathForGit(page));
+    await this.git.add(`${this.getImageDirForGit()}/*`);
+    await this.git.commit(`update post ${page.permalink}`);
+    await this.git.push(
       'origin',
-      `${this._branch_local_prefix}${page.permalink}`,
+      `${this.branch_local_prefix}${page.permalink}`,
       { '--set-upstream': null },
     );
     console.log('Done');
 
     // create PR if not exists
-    const pr = await this._github.rest.search.issuesAndPullRequests({
+    const pr = await this.github.rest.search.issuesAndPullRequests({
       q: `is:pr is:open "${this.getPRTitle(page)}"`,
     });
     if (pr.data.total_count === 0) {
       console.log('PR is not found, creating...');
-      await this._github.rest.pulls.create({
-        owner: this._github_user,
-        repo: this._github_repo_name,
-        head: `${this._github_user}:${this._branch_local_prefix}${page.permalink}`,
+      await this.github.rest.pulls.create({
+        owner: this.github_user,
+        repo: this.github_repo_name,
+        head: `${this.github_user}:${this.branch_local_prefix}${page.permalink}`,
         base: 'main',
         title: this.getPRTitle(page),
       });
@@ -148,8 +144,8 @@ export class Git {
 
   private branchExists(permalink: string): boolean {
     return (
-      this._branches.find(
-        (v) => v === `${this._branch_remote_prefix}${permalink}`,
+      this.branches.find(
+        (v) => v === `${this.branch_remote_prefix}${permalink}`,
       ) !== undefined
     );
   }
@@ -210,11 +206,11 @@ export class Git {
   }
 
   private getMdDir(page: NotionPageData): string {
-    return `${this._working_dir}${this.getMdDirForGit(page)}`;
+    return `${this.working_dir}${this.getMdDirForGit(page)}`;
   }
 
   private getImageDir(): string {
-    return `${this._working_dir}${this._image_dir_prefix}`;
+    return `${this.working_dir}${this.image_dir_prefix}`;
   }
 
   private getMdPathForGit(page: NotionPageData): string {
@@ -222,12 +218,12 @@ export class Git {
   }
 
   private getImageDirForGit(): string {
-    return `${this._image_dir_prefix}`;
+    return `${this.image_dir_prefix}`;
   }
 
   private getMdDirForGit(page: NotionPageData): string {
     const createdDate = new Date(page.date);
-    return `${this._blog_post_dir}${format(createdDate, 'yyyy/MM')}/`;
+    return `${this.blog_post_dir}${format(createdDate, 'yyyy/MM')}/`;
   }
 
   private getPRTitle(page: NotionPageData): string {
@@ -293,7 +289,7 @@ ${md}`;
     for (const image of images) {
       md = md.replace(
         `![](${image.url})`,
-        `![${image.file_name}](${this._blog_assert_dir}${this._image_dir_prefix}${image.file_name})`,
+        `![${image.file_name}](${this.blog_asset_dir}${this.image_dir_prefix}${image.file_name})`,
       );
     }
     return md;
