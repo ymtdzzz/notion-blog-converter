@@ -1,9 +1,9 @@
 import { type NotionToMarkdown } from 'notion-to-md';
-import * as fs from 'fs';
 import { type Config } from './config';
 import { type NotionPageData } from './notion/types';
+import { existsSync, readFileSync } from 'fs';
 
-interface ImagePair {
+export interface ImagePair {
   url: string;
   file_name: string;
 }
@@ -26,18 +26,18 @@ export class Markdown {
     fromNotion = this.replaceImageURLToPath(images, fromNotion);
     fromNotion = this.addHeaderToMd(page, fromNotion);
 
-    if (!fs.existsSync(currentMdPath)) return [true, images, fromNotion];
-    let curMD = fs.readFileSync(currentMdPath).toString();
+    if (!existsSync(currentMdPath)) return [true, images, fromNotion];
+    let curMD = readFileSync(currentMdPath).toString();
 
     const imageUUIDs: string[] = [];
     for (const image of images) {
       imageUUIDs.push(this.getImageUUID(image.url));
     }
 
-    fromNotion = this.deleteExistingImages(fromNotion, imageUUIDs);
+    const fromNotionForComp = this.deleteExistingImages(fromNotion, imageUUIDs);
     curMD = this.deleteExistingImages(curMD, imageUUIDs);
 
-    return [curMD !== fromNotion, images, fromNotion];
+    return [curMD !== fromNotionForComp, images, fromNotion];
   }
 
   private getImageURLFromMd(md: string): ImagePair[] {

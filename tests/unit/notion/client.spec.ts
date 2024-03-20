@@ -87,14 +87,14 @@ describe('Notion class', () => {
         auth: config.notion.token,
       });
       const spyQuery = jest.spyOn(nclient.databases, 'query');
-      spyQuery.mockImplementationOnce((_args): any => {
+      spyQuery.mockImplementationOnce((_): any => {
         return {
           has_more: true,
           next_cursor: '123',
           results: pages1,
         };
       });
-      spyQuery.mockImplementationOnce((_args): any => {
+      spyQuery.mockImplementationOnce((_): any => {
         return {
           has_more: false,
           next_cursor: null,
