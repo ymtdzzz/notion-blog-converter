@@ -1,12 +1,13 @@
 import { Client } from '@notionhq/client';
-import { Notion, type NotionPageData } from '../../src/notion';
-import { initConfig } from '../../src/config';
 import type {
   EquationRichTextItemResponse,
   PageObjectResponse,
   PartialPageObjectResponse,
   PartialUserObjectResponse,
 } from '@notionhq/client/build/src/api-endpoints';
+import { type NotionPageData } from '../../../src/notion/types';
+import { NotionClient } from '../../../src/notion/client';
+import { initConfig } from '../../../src/config';
 
 const PROP_NAME_PERMALINK = 'permalink';
 const PROP_NAME_TAG = 'tag';
@@ -100,7 +101,7 @@ describe('Notion class', () => {
           results: pages2,
         };
       });
-      const notion = new Notion(
+      const notion = new NotionClient(
         {
           props: config.property_names,
         },

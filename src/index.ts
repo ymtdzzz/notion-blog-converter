@@ -2,10 +2,11 @@ import dotenv from 'dotenv';
 import { Client, LogLevel } from '@notionhq/client';
 import { NotionToMarkdown } from 'notion-to-md';
 import { exit } from 'process';
-import { Notion, type NotionPageData } from './notion';
-import { Git } from './git';
+import { Processor } from './processor';
 import { Octokit } from 'octokit';
 import { initConfig } from './config';
+import { type NotionPageData } from './notion/types';
+import { NotionClient } from './notion/client';
 dotenv.config();
 
 const config = initConfig();
@@ -19,9 +20,9 @@ const gclient = new Octokit({ auth: config.github.pat });
 
 const n2m = new NotionToMarkdown({ notionClient: nclient });
 
-await (async () => {
+(async () => {
   // retrieve blog posts
-  const notion = new Notion(
+  const notion = new NotionClient(
     {
       props: config.property_names,
     },
@@ -35,19 +36,19 @@ await (async () => {
     exit(1);
   }
 
-  let git: Git | undefined;
+  let processor: Processor | undefined;
   try {
-    git = await Git.build(gclient, config);
+    processor = await Processor.build(gclient, n2m, config);
     for (const page of pages) {
-      const mdblocks = await n2m.pageToMarkdown(page.id);
-      const mdString = n2m.toMarkdownString(mdblocks);
-      await git.process(page, mdString);
+      await processor.process(page);
     }
   } catch (e) {
     console.error(`error occurred when handling git repository: ${String(e)}`);
   } finally {
-    if (git !== undefined) {
-      git.close();
+    if (processor !== undefined) {
+      processor.close();
     }
   }
-})();
+})().catch((e) => {
+  console.log(`error occurred: ${String(e)}`);
+});

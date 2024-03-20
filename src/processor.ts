@@ -2,9 +2,11 @@ import { format } from 'date-fns';
 import * as fs from 'fs';
 import type { Octokit } from 'octokit';
 import simpleGit, { type SimpleGit } from 'simple-git';
-import type { NotionPageData } from './notion';
+import type { NotionPageData } from './notion/types';
 import download from 'image-downloader';
-import type { Config } from './config';
+import { getRepoName, type Config } from './config';
+import { Markdown } from './markdown';
+import { type NotionToMarkdown } from 'notion-to-md';
 
 interface ImagePair {
   url: string;
@@ -12,23 +14,23 @@ interface ImagePair {
 }
 
 /**
+ * Processor is a class to process Notion pages.
  * All operations should be executed in try-catch block.
  * Don't forget to call close() in finally block.
  */
-export class Git {
+export class Processor {
   private readonly image_dir_prefix = 'images/notion/';
   private readonly branch_local_prefix = 'auto-generate/';
   private readonly branch_remote_prefix = `remotes/origin/${this.branch_local_prefix}`;
   private branches: string[] = [];
-  private blog_asset_dir = ''; // ex.) "../src/assets/"
-  private blog_post_dir = ''; // ex.) "content/posts/"
-  private github_repo_name = '';
   private github_user = '';
 
   private constructor(
     private readonly git: SimpleGit,
     private readonly github: Octokit,
     private readonly working_dir: string,
+    private readonly config: Config,
+    private readonly md: Markdown,
   ) {
     this.git = git;
     this.working_dir = working_dir;
@@ -41,8 +43,9 @@ export class Git {
 
   public static async build(
     githubClient: Octokit,
+    n2m: NotionToMarkdown,
     config: Config,
-  ): Promise<Git> {
+  ): Promise<Processor> {
     const workdir = './tmp/';
 
     fs.mkdirSync(workdir);
@@ -54,14 +57,8 @@ export class Git {
       maxConcurrentProcesses: 6,
       trimmed: false,
     });
-    const res = new Git(git, githubClient, workdir);
-    res.blog_asset_dir = config.blog.asset_dir;
-    res.blog_post_dir = config.blog.post_dir;
-    const githubRepoElems = config.github.repo.split('/');
-    res.github_repo_name = githubRepoElems[githubRepoElems.length - 1].replace(
-      '.git',
-      '',
-    );
+    const md = new Markdown(config, n2m);
+    const res = new Processor(git, githubClient, workdir, config, md);
     const user = await githubClient.rest.users.getAuthenticated();
     res.github_user = user.data.login;
 
@@ -74,11 +71,7 @@ export class Git {
     return res;
   }
 
-  public async process(page: NotionPageData, md: string): Promise<void> {
-    const images = this.getImageURLFromMd(md);
-    md = this.replaceImageURLToPath(images, md);
-    md = this.addHeaderToMd(page, md);
-
+  public async process(page: NotionPageData): Promise<void> {
     if (!this.branchExists(page.permalink)) {
       console.log('branch not exists. create new branch from main branch...');
       await this.git.checkoutLocalBranch(
@@ -97,19 +90,25 @@ export class Git {
     }
 
     console.log('checking diff...');
-    if (!this.hasDiff(page, md, images)) {
+    const [hasDiff, images, mdFromNotion] = await this.md.hasDiff(
+      page,
+      this.getMdPath(page),
+    );
+    if (!hasDiff) {
       console.log('this page has no diffs. nothing to do.');
       return;
     }
 
-    console.log('image downloading...');
-    await this.downloadImages(images);
-    console.log('Done');
+    if (images.length > 0) {
+      console.log('image downloading...');
+      await this.downloadImages(images);
+      console.log('Done');
+    }
 
     // commit and push
     console.log('some diff detected. updating or creating md...');
     fs.mkdirSync(this.getMdDir(page), { recursive: true });
-    fs.writeFileSync(this.getMdPath(page), md);
+    fs.writeFileSync(this.getMdPath(page), mdFromNotion);
     console.log('Done');
 
     console.log('commit and push...');
@@ -131,7 +130,7 @@ export class Git {
       console.log('PR is not found, creating...');
       await this.github.rest.pulls.create({
         owner: this.github_user,
-        repo: this.github_repo_name,
+        repo: getRepoName(this.config),
         head: `${this.github_user}:${this.branch_local_prefix}${page.permalink}`,
         base: 'main',
         title: this.getPRTitle(page),
@@ -148,57 +147,6 @@ export class Git {
         (v) => v === `${this.branch_remote_prefix}${permalink}`,
       ) !== undefined
     );
-  }
-
-  private hasDiff(
-    page: NotionPageData,
-    md: string,
-    images: ImagePair[],
-  ): boolean {
-    const path = this.getMdPath(page);
-
-    if (!fs.existsSync(path)) return true;
-
-    const imageUUIDs: string[] = [];
-    for (const image of images) {
-      imageUUIDs.push(this.getImageUUID(image.url));
-    }
-    let curMD = fs.readFileSync(path).toString();
-    md = this.deleteExistingImages(md, imageUUIDs);
-    curMD = this.deleteExistingImages(curMD, imageUUIDs);
-
-    return curMD !== md;
-  }
-
-  private deleteExistingImages(md: string, uuids: string[]): string {
-    const lines = md.split(/\r?\n/);
-    for (let [idx, line] of lines.entries()) {
-      line = line.trim();
-      if (!line.startsWith('![')) continue;
-
-      let found = false;
-      for (const uuid of uuids) {
-        if (line.includes(uuid)) {
-          found = true;
-          break;
-        }
-      }
-      if (found) {
-        lines.splice(idx, 1);
-      }
-    }
-
-    return lines.join('\n');
-  }
-
-  private getImageUUID(url: string): string {
-    const u = new URL(url);
-    // url.pathname should be like "secure.notion-static.com/ed17c715-4171-442d-aa50-26d18a587bae/Untitled.png"
-    const paths = u.pathname.split('/');
-    if (paths.length > 2) {
-      return paths[paths.length - 2]; // retrieve uuid "ed17c715-4171-442d-aa50-26d18a587bae"
-    }
-    return '';
   }
 
   private getMdPath(page: NotionPageData): string {
@@ -223,31 +171,11 @@ export class Git {
 
   private getMdDirForGit(page: NotionPageData): string {
     const createdDate = new Date(page.date);
-    return `${this.blog_post_dir}${format(createdDate, 'yyyy/MM')}/`;
+    return `${this.config.blog.post_dir}${format(createdDate, 'yyyy/MM')}/`;
   }
 
   private getPRTitle(page: NotionPageData): string {
     return `[AUTO-GENERATED] ${page.permalink}`;
-  }
-
-  private getImageURLFromMd(md: string): ImagePair[] {
-    const regex = /!\[\]\((.*)\)/g;
-    const res: ImagePair[] = [];
-    let m: RegExpExecArray | null = null;
-    do {
-      m = regex.exec(md);
-      if (m?.length === 2) {
-        const url = new URL(m[1]);
-        const elms = url.pathname.split('.');
-        const ext = elms[elms.length - 1];
-        res.push({
-          url: m[1],
-          file_name: `${this.getImageUUID(m[1])}.${ext}`, // This is not necessary to be secure
-        });
-      }
-    } while (m != null);
-
-    return res;
   }
 
   private async downloadImages(images: ImagePair[]): Promise<void> {
@@ -259,39 +187,5 @@ export class Git {
       });
       console.log('OK');
     }
-  }
-
-  private addHeaderToMd(page: NotionPageData, md: string): string {
-    const getRow = (tag: string): string => ` - ${tag}`;
-
-    let tagsLines = '';
-    page.tags.forEach((tag) => {
-      if (tagsLines === '') {
-        tagsLines = getRow(tag);
-        return;
-      }
-      tagsLines = `${tagsLines}
-${getRow(tag)}`;
-    });
-
-    return `---
-title: ${page.title}
-date: ${page.date}
-tags:
-${tagsLines}
-published: true
-category: ${page.category}
----
-${md}`;
-  }
-
-  private replaceImageURLToPath(images: ImagePair[], md: string): string {
-    for (const image of images) {
-      md = md.replace(
-        `![](${image.url})`,
-        `![${image.file_name}](${this.blog_asset_dir}${this.image_dir_prefix}${image.file_name})`,
-      );
-    }
-    return md;
   }
 }

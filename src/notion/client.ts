@@ -5,29 +5,9 @@ import {
   type QueryDatabaseResponse,
 } from '@notionhq/client/build/src/api-endpoints';
 import { format } from 'date-fns';
+import type { NotionConfig, NotionPageData } from './types';
 
-interface NotionPropNames {
-  permalink: string;
-  tag: string;
-  category: string;
-  exclude_checkbox: string;
-  include_checkbox: string;
-}
-
-interface NotionConfig {
-  props: NotionPropNames;
-}
-
-export interface NotionPageData {
-  id: string;
-  title: string;
-  category: string;
-  permalink: string;
-  date: string;
-  tags: string[];
-}
-
-export class Notion {
+export class NotionClient {
   constructor(
     private readonly _config: NotionConfig,
     private readonly client: Client,
